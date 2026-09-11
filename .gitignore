@@ -1,0 +1,27 @@
+# Entornos y dependencias
+backend/.venv/
+frontend/node_modules/
+frontend/dist/
+__pycache__/
+*.pyc
+
+# Secretos y datos: NUNCA al repositorio
+.env
+.env.local
+backend/.env
+frontend/.env
+frontend/.env.local
+*.db
+backend/local.db
+backend/pruebas/prueba.db
+
+# El archivo real de nominas, si alguien procesa en local
+Archivo/
+*.zip
+
+# Vercel
+.vercel
+
+# Sistema
+.DS_Store
+Thumbs.db

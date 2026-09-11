@@ -1,0 +1,810 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Archivo de nóminas</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<style>
+  :root{
+    --papel:#E9EBEE; --tarjeta:#FFFFFF; --tinta:#101B2E; --tinta2:#5B667A;
+    --linea:#CBD1DA; --oro:#C8961F; --oro-suave:#F6EAC9; --roja:#A83A2B; --verde:#1D6B49;
+    --sombra:0 1px 0 rgba(16,27,46,.06), 0 8px 24px -18px rgba(16,27,46,.5);
+    --display:'Arial Narrow','Helvetica Neue',Helvetica,Arial,sans-serif;
+    --texto:ui-sans-serif,system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--papel);color:var(--tinta);font-family:var(--texto);
+       font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .lienzo{max-width:1180px;margin:0 auto;padding:28px 20px 80px}
+
+  header.club{border-bottom:3px double var(--tinta);padding-bottom:18px;margin-bottom:22px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+           color:var(--tinta2);margin:0 0 6px}
+  h1{font-family:var(--display);font-stretch:condensed;font-weight:700;text-transform:uppercase;
+     letter-spacing:.03em;line-height:.94;font-size:clamp(38px,7vw,68px);margin:0 0 8px}
+  h1 em{font-style:normal;color:var(--oro)}
+  .lead{margin:0;max-width:56ch;color:var(--tinta2)}
+
+  .acciones{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:18px 0 10px}
+  button{font:inherit;cursor:pointer}
+  .btn{border:1.5px solid var(--tinta);background:var(--tarjeta);color:var(--tinta);
+       padding:11px 18px;border-radius:2px;font-family:var(--display);font-stretch:condensed;
+       font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:16px;
+       transition:transform .12s ease, background .12s ease, color .12s ease}
+  .btn:hover{background:var(--tinta);color:#fff;transform:translateY(-1px)}
+  .btn.primario{background:var(--tinta);color:#fff}
+  .btn.primario:hover{background:var(--oro);border-color:var(--oro);color:var(--tinta)}
+  .btn.fantasma{border-color:var(--linea);color:var(--tinta2)}
+  .btn.fantasma:hover{border-color:var(--tinta);background:transparent;color:var(--tinta)}
+  .btn.mini{padding:6px 10px;font-size:13px;letter-spacing:.05em}
+  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+  :focus-visible{outline:2px solid var(--oro);outline-offset:2px}
+
+  .pistas{margin:0 0 22px;font-size:12.5px;color:var(--tinta2);max-width:78ch;
+          border-left:2px solid var(--oro);padding-left:10px}
+  .pistas b{color:var(--tinta);font-weight:600}
+
+  .ajustes{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:0 0 22px}
+  .ajuste{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+          color:var(--tinta2);display:flex;align-items:center;gap:7px}
+  select,input[type=text]{font:inherit;border:1px solid var(--linea);background:var(--tarjeta);
+       color:var(--tinta);border-radius:2px;padding:7px 9px}
+  .ajuste select{font-family:var(--mono);font-size:11px;padding:5px 6px;text-transform:none;letter-spacing:0}
+
+  .rejilla{display:grid;grid-template-columns:330px 1fr;gap:26px;align-items:start}
+  @media(max-width:880px){.rejilla{grid-template-columns:1fr}}
+
+  .rotulo{display:flex;align-items:center;gap:10px;border-bottom:1.5px solid var(--tinta);
+          padding-bottom:7px;margin:0 0 14px;min-height:34px}
+  .rotulo h2{font-family:var(--display);font-stretch:condensed;font-weight:700;text-transform:uppercase;
+             letter-spacing:.08em;font-size:19px;margin:0}
+  .cuenta{font-family:var(--mono);font-size:12px;color:var(--tinta2);margin-left:auto}
+  .volver{border:0;background:none;padding:2px 6px;font-family:var(--mono);font-size:12px;
+          color:var(--tinta2);border-radius:2px}
+  .volver:hover{color:var(--tinta);background:var(--oro-suave)}
+
+  /* plantilla */
+  .ficha{background:var(--tarjeta);border:1px solid var(--linea);border-left:3px solid var(--tinta);
+         padding:10px 12px;margin-bottom:8px;display:flex;gap:12px;align-items:center;
+         box-shadow:var(--sombra);cursor:pointer;transition:border-color .12s ease}
+  .ficha:hover{border-left-color:var(--oro)}
+  .ficha.activa{border-left-color:var(--oro);background:#FFFDF6}
+  .iniciales{font-family:var(--display);font-stretch:condensed;font-weight:700;font-size:16px;
+             line-height:1;letter-spacing:.04em;min-width:38px;height:38px;display:grid;
+             place-items:center;border:1.5px solid var(--tinta);flex:none}
+  .ficha .datos{flex:1;min-width:0}
+  .ficha .nom{font-weight:600;letter-spacing:-.01em}
+  .ficha .meta{font-family:var(--mono);font-size:11px;color:var(--tinta2);word-break:break-word}
+  .iconos{display:flex;gap:2px;flex:none}
+  .iconobtn{border:0;background:none;color:var(--tinta2);font-size:14px;line-height:1;
+            padding:5px 6px;border-radius:2px}
+  .iconobtn:hover{color:var(--tinta);background:var(--oro-suave)}
+  .iconobtn.borrar:hover{color:var(--roja)}
+
+  .vacio{border:1.5px dashed var(--linea);background:rgba(255,255,255,.5);padding:22px;
+         text-align:center;color:var(--tinta2)}
+  .vacio.chico{padding:13px;font-size:13px;text-align:left}
+  .vacio strong{display:block;color:var(--tinta);font-weight:600;margin-bottom:4px}
+
+  /* carpetas */
+  .carpeta{background:var(--tarjeta);border:1px solid var(--linea);margin-bottom:14px;box-shadow:var(--sombra)}
+  .carpeta > .cab{display:flex;align-items:center;gap:10px;padding:11px 14px;
+                  border-bottom:1px solid var(--linea);background:linear-gradient(var(--tarjeta),#F7F8FA)}
+  .carpeta .icono{width:22px;height:16px;flex:none;border:1.5px solid var(--tinta);
+                  border-top-width:5px;border-top-color:var(--oro)}
+  .carpeta.sin .icono{border-top-color:var(--roja)}
+  .carpeta .ruta{font-family:var(--mono);font-size:13px;font-weight:600}
+  .carpeta .n{font-family:var(--mono);font-size:11px;color:var(--tinta2);margin-left:auto}
+  .carpeta .cab .abrir{border:0;background:none;font-family:var(--mono);font-size:11px;
+                       color:var(--tinta2);padding:4px 6px;border-radius:2px}
+  .carpeta .cab .abrir:hover{color:var(--tinta);background:var(--oro-suave)}
+
+  .sub{border-top:1px solid var(--linea)}
+  .sub > .subcab{display:flex;align-items:center;gap:9px;padding:8px 14px;background:#F7F8FA}
+  .sub .pestana{width:15px;height:11px;flex:none;border:1.2px solid var(--tinta2);border-top-width:4px}
+  .sub.contrato .pestana{border-top-color:var(--verde)}
+  .sub.nomina   .pestana{border-top-color:var(--oro)}
+  .sub.varios   .pestana{border-top-color:var(--tinta2)}
+  .sub .subruta{font-family:var(--mono);font-size:12px}
+  .sub .subn{font-family:var(--mono);font-size:11px;color:var(--tinta2)}
+  .sub .subacc{margin-left:auto}
+  .sub .cuerpo{padding:0 14px 6px}
+  .sub .cuerpo .vacio{margin:8px 0 10px}
+
+  .doc{padding:11px 0;border-top:1px dotted var(--linea);display:grid;gap:9px}
+  .doc:first-child{border-top:0}
+  .doc .fila{display:flex;flex-wrap:wrap;gap:9px;align-items:center}
+  .doc .nombre{flex:1;min-width:210px;font-family:var(--mono);font-size:13px;
+               border:1px solid transparent;border-bottom-color:var(--linea);background:transparent;padding:4px 2px}
+  .doc .nombre:hover{border-bottom-color:var(--tinta)}
+  .doc .nombre:focus{border-color:var(--oro);background:#fff}
+  .sello{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+         border:1px solid var(--linea);padding:3px 6px;color:var(--tinta2);white-space:nowrap}
+  .sello.aviso{border-color:var(--roja);color:var(--roja)}
+  .sello.ok{border-color:var(--verde);color:var(--verde)}
+  .doc select,.doc input.periodo{font-size:13px;padding:6px 8px}
+  .doc input.periodo{width:140px;font-family:var(--mono)}
+
+  /* expediente */
+  .expediente{background:var(--tarjeta);border:1px solid var(--linea);border-top:5px solid var(--oro);
+              padding:18px;margin-bottom:16px;box-shadow:var(--sombra);display:flex;gap:16px;
+              align-items:flex-start;flex-wrap:wrap}
+  .expediente .iniciales{min-width:54px;height:54px;font-size:22px}
+  .expediente .quien{flex:1;min-width:180px}
+  .expediente h3{font-family:var(--display);font-stretch:condensed;font-weight:700;text-transform:uppercase;
+                 letter-spacing:.04em;font-size:28px;margin:0 0 2px;line-height:1}
+  .expediente .dato{font-family:var(--mono);font-size:12px;color:var(--tinta2)}
+  .expediente .mandos{display:flex;gap:8px;flex-wrap:wrap}
+
+  .estado{display:none;align-items:center;gap:12px;background:var(--tinta);color:#fff;
+          padding:12px 16px;margin-bottom:18px}
+  .estado.visible{display:flex}
+  .estado .txt{font-family:var(--mono);font-size:12px;letter-spacing:.05em}
+  .barra{flex:1;height:3px;background:rgba(255,255,255,.22);overflow:hidden}
+  .barra i{display:block;height:100%;width:0;background:var(--oro);transition:width .25s ease}
+
+  dialog{border:1.5px solid var(--tinta);border-top:6px solid var(--oro);padding:0;
+         background:var(--tarjeta);max-width:440px;width:calc(100% - 32px)}
+  dialog::backdrop{background:rgba(16,27,46,.45)}
+  .modal-cuerpo{padding:20px 22px 22px}
+  .modal-cuerpo h3{font-family:var(--display);font-stretch:condensed;text-transform:uppercase;
+                   letter-spacing:.06em;font-size:24px;margin:0 0 4px}
+  .modal-cuerpo p.ayuda{margin:0 0 16px;color:var(--tinta2);font-size:13px}
+  .campo{margin-bottom:12px}
+  .campo label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;
+               text-transform:uppercase;color:var(--tinta2);margin-bottom:4px}
+  .campo input{width:100%}
+  .campo small{display:block;color:var(--tinta2);font-size:12px;margin-top:3px}
+  .modal-pie{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+  .error{color:var(--roja);font-size:13px;min-height:18px;font-family:var(--mono)}
+
+  .nota{margin-top:26px;border-top:1px solid var(--linea);padding-top:12px;font-size:12px;
+        color:var(--tinta2);max-width:74ch}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+<div class="lienzo">
+
+  <header class="club">
+    <p class="eyebrow">Gestión de nóminas y contratos</p>
+    <h1>Archivo de <em>nóminas</em></h1>
+    <p class="lead">Sube el PDF con todas las nóminas del mes. Cada hoja se separa, se nombra
+      <span style="font-family:var(--mono)">trabajador_mes.pdf</span> y se guarda en la carpeta de su
+      trabajador, junto a su contrato y sus documentos.</p>
+  </header>
+
+  <div class="acciones">
+    <button class="btn primario" id="btnSubir">Subir PDF de nóminas</button>
+    <button class="btn" id="btnNuevo">Crear trabajador</button>
+    <button class="btn fantasma" id="btnZip" disabled>Descargar archivo (ZIP)</button>
+    <button class="btn fantasma" id="btnRe" disabled
+            title="Vuelve a comparar con la plantilla los documentos que quedaron sin asignar">Reanalizar</button>
+    <input type="file" id="fichero" accept="application/pdf" hidden>
+    <input type="file" id="ficheroTrab" multiple hidden>
+  </div>
+
+  <p class="pistas"><b>Reanalizar</b> vuelve a leer los documentos que ya has subido y los compara con la
+    plantilla actual, para asignar los que quedaron en <i>Sin identificar</i> o sin periodo. Úsalo después de
+    crear o corregir un trabajador; nunca cambia lo que has asignado a mano.</p>
+
+  <div class="ajustes">
+    <label class="ajuste">Nombre del fichero
+      <select id="patron">
+        <option value="mes">Trabajador_Enero_2025</option>
+        <option value="num">Trabajador_2025-01</option>
+      </select>
+    </label>
+    <label class="ajuste">Ordenar por
+      <select id="orden">
+        <option value="periodo-desc">Periodo · más reciente antes</option>
+        <option value="periodo-asc">Periodo · más antiguo antes</option>
+        <option value="nombre">Nombre del fichero (A–Z)</option>
+        <option value="subida">Orden de subida</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="estado" id="estado">
+    <span class="txt" id="estadoTxt">Leyendo…</span>
+    <span class="barra"><i id="barra"></i></span>
+  </div>
+
+  <div class="rejilla">
+    <section>
+      <div class="rotulo"><h2>Plantilla</h2><span class="cuenta" id="cuentaPlantilla">0</span></div>
+      <div id="plantilla"></div>
+    </section>
+    <section>
+      <div class="rotulo" id="rotArchivo"></div>
+      <div id="archivo"></div>
+    </section>
+  </div>
+
+  <p class="nota">El PDF se procesa dentro de tu navegador: no se envía a ningún servidor. Las nóminas de
+    varias subidas se van acumulando en la carpeta de cada trabajador durante la sesión. La plantilla queda
+    guardada para la próxima vez, pero los documentos no: descarga el ZIP antes de cerrar. Al descomprimirlo
+    tendrás una carpeta por trabajador con Contrato, Nóminas y Documentos varios dentro.</p>
+</div>
+
+<dialog id="modal">
+  <form method="dialog" class="modal-cuerpo" id="formTrab">
+    <h3 id="modalTitulo">Nuevo trabajador</h3>
+    <p class="ayuda">Estos datos sirven para reconocer sus hojas dentro del PDF y para nombrar su carpeta.</p>
+    <div class="campo">
+      <label for="fNombre">Nombre y apellidos</label>
+      <input type="text" id="fNombre" required placeholder="Álvaro Ruiz Ferrán">
+      <small>Escríbelo igual que aparece en la nómina.</small>
+    </div>
+    <div class="campo">
+      <label for="fDni">DNI / NIE</label>
+      <input type="text" id="fDni" placeholder="12345678Z">
+      <small>Con el DNI la identificación es exacta.</small>
+    </div>
+    <div class="campo">
+      <label for="fPuesto">Puesto</label>
+      <input type="text" id="fPuesto" placeholder="Delantero · Primer equipo">
+    </div>
+    <p class="error" id="errForm"></p>
+    <div class="modal-pie">
+      <button class="btn fantasma" type="button" id="btnCancelar">Cancelar</button>
+      <button class="btn primario" type="submit" id="btnGuardar">Guardar trabajador</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const { PDFDocument } = PDFLib;
+
+/* ---------------- estado ---------------- */
+let trabajadores = [];   // {id, nombre, dni, puesto}
+let documentos   = [];   // {id, tipo, trabajadorId, periodo, periodoTxt, bytes, nombre, paginas, origen, texto, subido}
+let seleccion    = null;
+let editando     = null;
+let contador     = 0;
+
+const $ = s => document.querySelector(s);
+const CLAVE = 'nominas:plantilla';
+
+const TIPOS = {
+  contrato:{ orden:0, carpeta:'Contrato',           label:'Contrato' },
+  nomina:  { orden:1, carpeta:'Nóminas',            label:'Nómina' },
+  varios:  { orden:2, carpeta:'Documentos varios',  label:'Documento' }
+};
+
+/* ---------------- utilidades ---------------- */
+const norm = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+                    .toUpperCase().replace(/\s+/g,' ').trim();
+const sinAcentos = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const limpiaFich = s => sinAcentos(s).replace(/[\\/:*?"<>|]/g,'').replace(/\s+/g,'_')
+                    .replace(/_+/g,'_').replace(/^_|_$/g,'');
+const limpiaCarp = s => (s||'').replace(/[\\/:*?"<>|]/g,'').trim() || 'Sin nombre';
+const esc = s => (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const PARTICULAS = new Set(['DE','DEL','LA','LAS','LOS','EL','Y','DA','DOS','VAN','VON']);
+const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO',
+               'SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+const MESES_BONITO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto',
+                      'Septiembre','Octubre','Noviembre','Diciembre'];
+const iniciales = n => norm(n).split(' ').filter(x=>!PARTICULAS.has(x)).slice(0,2)
+                        .map(x=>x[0]).join('') || '–';
+const buscaTrab = id => trabajadores.find(t => t.id === id);
+const docsDe = id => documentos.filter(d => d.trabajadorId === id);
+const docsDeTipo = (id, tipo) => ordena(documentos.filter(d => d.trabajadorId === id && d.tipo === tipo));
+
+/* ---------------- almacenamiento ---------------- */
+async function cargarPlantilla(){
+  try{ const r = await window.storage.get(CLAVE); if(r && r.value) trabajadores = JSON.parse(r.value); }
+  catch(e){ trabajadores = []; }
+  pintarPlantilla();
+}
+async function guardarPlantilla(){
+  try{ await window.storage.set(CLAVE, JSON.stringify(trabajadores)); }
+  catch(e){ console.warn('No se pudo guardar la plantilla', e); }
+}
+
+/* ---------------- ordenación ---------------- */
+const clavePeriodo = d => d.periodo ? (d.periodo.anio || 0) * 100 + d.periodo.mes : -1;
+function ordena(lista){
+  const modo = $('#orden').value;
+  const c = [...lista];
+  if(modo === 'subida')  return c.sort((a,b) => a.subido - b.subido);
+  if(modo === 'nombre')  return c.sort((a,b) => (a.nombre||'').localeCompare(b.nombre||'','es'));
+  const dir = modo === 'periodo-asc' ? 1 : -1;
+  return c.sort((a,b) => (clavePeriodo(a) - clavePeriodo(b)) * dir || (a.subido - b.subido));
+}
+$('#orden').onchange = pintarArchivo;
+$('#patron').onchange = () => { documentos.forEach(d => { if(d.tipo==='nomina') d.nombre = null; }); pintarArchivo(); };
+
+/* ---------------- plantilla ---------------- */
+function pintarPlantilla(){
+  const cont = $('#plantilla');
+  $('#cuentaPlantilla').textContent = trabajadores.length +
+    (trabajadores.length === 1 ? ' trabajador' : ' trabajadores');
+  if(!trabajadores.length){
+    cont.innerHTML = `<div class="vacio"><strong>Plantilla vacía</strong>
+      Crea a los trabajadores para que sus nóminas se archiven solas.</div>`;
+    return;
+  }
+  cont.innerHTML = trabajadores.map(t => {
+    const n = docsDe(t.id).filter(d => d.tipo==='nomina').length;
+    const c = docsDe(t.id).filter(d => d.tipo==='contrato').length;
+    const meta = [t.dni, t.puesto].filter(Boolean).map(esc).join(' · ');
+    return `<div class="ficha ${seleccion===t.id?'activa':''}" data-abrir="${t.id}" tabindex="0" role="button">
+      <div class="iniciales">${esc(iniciales(t.nombre))}</div>
+      <div class="datos">
+        <div class="nom">${esc(t.nombre)}</div>
+        <div class="meta">${meta || 'Sin más datos'}</div>
+        <div class="meta">${n ? n + (n===1?' nómina':' nóminas') : 'Sin nóminas'} · ${c ? 'con contrato' : 'sin contrato'}</div>
+      </div>
+      <div class="iconos">
+        <button class="iconobtn" data-editar="${t.id}" title="Editar" aria-label="Editar a ${esc(t.nombre)}">✎</button>
+        <button class="iconobtn borrar" data-borrar="${t.id}" title="Quitar" aria-label="Quitar a ${esc(t.nombre)}">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+$('#plantilla').addEventListener('click', e => {
+  const ed = e.target.dataset.editar, bo = e.target.dataset.borrar;
+  if(ed) return abrirModal(ed);
+  if(bo) return borrarTrabajador(bo);
+  const fila = e.target.closest('[data-abrir]');
+  if(fila) abrirTrabajador(fila.dataset.abrir);
+});
+$('#plantilla').addEventListener('keydown', e => {
+  if((e.key==='Enter'||e.key===' ') && e.target.dataset.abrir){
+    e.preventDefault(); abrirTrabajador(e.target.dataset.abrir);
+  }
+});
+
+async function borrarTrabajador(id){
+  const t = buscaTrab(id), n = docsDe(id).length;
+  if(!confirm(`¿Quitar a ${t.nombre} de la plantilla?` +
+     (n ? `\nSus ${n} documento(s) pasarán a "Sin identificar".` : ''))) return;
+  trabajadores = trabajadores.filter(x => x.id !== id);
+  documentos.forEach(d => { if(d.trabajadorId === id){ d.trabajadorId = null; d.nombre = null; } });
+  if(seleccion === id) seleccion = null;
+  await guardarPlantilla(); pintarPlantilla(); pintarArchivo();
+}
+function abrirTrabajador(id){
+  seleccion = (seleccion === id) ? null : id;
+  pintarPlantilla(); pintarArchivo();
+  $('#rotArchivo').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+/* ---------------- alta y edición ---------------- */
+function abrirModal(id){
+  editando = id || null;
+  const t = id ? buscaTrab(id) : null;
+  $('#modalTitulo').textContent = t ? 'Editar trabajador' : 'Nuevo trabajador';
+  $('#btnGuardar').textContent  = t ? 'Guardar cambios' : 'Guardar trabajador';
+  $('#fNombre').value = t ? t.nombre : '';
+  $('#fDni').value    = t ? t.dni    : '';
+  $('#fPuesto').value = t ? t.puesto : '';
+  $('#errForm').textContent = '';
+  $('#modal').showModal(); $('#fNombre').focus();
+}
+$('#btnNuevo').onclick    = () => abrirModal(null);
+$('#btnCancelar').onclick = () => $('#modal').close();
+
+$('#formTrab').addEventListener('submit', async e => {
+  const nombre = $('#fNombre').value.trim();
+  if(nombre.split(/\s+/).length < 2){
+    e.preventDefault(); $('#errForm').textContent = 'Escribe nombre y al menos un apellido.'; return;
+  }
+  const datos = { nombre, dni: $('#fDni').value.trim().toUpperCase(), puesto: $('#fPuesto').value.trim() };
+  if(editando){
+    Object.assign(buscaTrab(editando), datos);
+    docsDe(editando).forEach(d => { if(d.tipo === 'nomina') d.nombre = null; });
+  }else{
+    trabajadores.push({ id:'t'+Date.now()+Math.random().toString(36).slice(2,6), ...datos });
+  }
+  trabajadores.sort((a,b) => a.nombre.localeCompare(b.nombre,'es'));
+  editando = null;
+  await guardarPlantilla(); pintarPlantilla(); pintarArchivo();
+  if(documentos.length) $('#btnRe').disabled = false;
+});
+
+/* ---------------- estado visual ---------------- */
+function estado(visible, txt, pct){
+  $('#estado').classList.toggle('visible', visible);
+  if(txt !== undefined) $('#estadoTxt').textContent = txt;
+  if(pct !== undefined) $('#barra').style.width = pct + '%';
+}
+
+/* ---------------- subida del PDF de nóminas ---------------- */
+$('#btnSubir').onclick = () => $('#fichero').click();
+$('#fichero').addEventListener('change', async e => {
+  const f = e.target.files[0]; if(!f) return; e.target.value = '';
+  try{ await procesarLote(f); }
+  catch(err){
+    console.error(err); estado(false);
+    alert('No se ha podido leer el PDF. Comprueba que no esté protegido con contraseña.');
+  }
+});
+
+async function procesarLote(f){
+  const bytes = new Uint8Array(await f.arrayBuffer());
+  estado(true, 'Abriendo el PDF…', 2);
+  const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+
+  const textos = [];
+  for(let i = 1; i <= doc.numPages; i++){
+    estado(true, `Leyendo página ${i} de ${doc.numPages}`, (i/doc.numPages)*65);
+    const p = await doc.getPage(i);
+    const tc = await p.getTextContent();
+    textos.push(norm(tc.items.map(it => it.str).join(' ')));
+  }
+
+  estado(true, 'Separando nóminas…', 70);
+  const marcas = textos.map(t => {
+    const trab = identifica(t), per = detectaPeriodo(t);
+    return { trab, per, clave:(trab?trab.id:'x') + '|' + (per ? per.mes+'-'+per.anio : '') };
+  });
+  const grupos = [];
+  marcas.forEach((m, i) => {
+    const u = grupos[grupos.length-1];
+    if(u && u.clave === m.clave && m.trab) u.paginas.push(i);
+    else grupos.push({ clave:m.clave, trab:m.trab, per:m.per, paginas:[i] });
+  });
+
+  const src = await PDFDocument.load(bytes.slice());
+  let nuevos = 0, repetidos = 0;
+  for(let i = 0; i < grupos.length; i++){
+    const g = grupos[i];
+    estado(true, `Generando PDF ${i+1} de ${grupos.length}`, 72 + (i/grupos.length)*26);
+    const firma = f.name + '#' + g.paginas.join(',');
+    if(documentos.some(d => d.firma === firma)){ repetidos++; continue; }
+    const nuevo = await PDFDocument.create();
+    (await nuevo.copyPages(src, g.paginas)).forEach(h => nuevo.addPage(h));
+    documentos.push({
+      id: 'd' + (++contador),
+      tipo: 'nomina',
+      firma,
+      origen: f.name,
+      paginas: g.paginas.map(n => n+1),
+      texto: g.paginas.map(n => textos[n]).join(' '),
+      trabajadorId: g.trab ? g.trab.id : null,
+      periodo: g.per,
+      periodoTxt: etiquetaPeriodo(g.per),
+      bytes: await nuevo.save(),
+      nombre: null,
+      subido: Date.now() + i
+    });
+    nuevos++;
+  }
+  estado(true, `${nuevos} nómina(s) añadidas${repetidos ? ` · ${repetidos} ya estaban` : ''}`, 100);
+  setTimeout(() => estado(false), 1400);
+  $('#btnZip').disabled = false; $('#btnRe').disabled = false;
+  pintarPlantilla(); pintarArchivo();
+}
+
+/* ---------------- subida suelta (contrato / varios / nómina) ---------------- */
+let destinoSubida = null;   // {trabajadorId, tipo}
+function pedirFichero(trabajadorId, tipo){
+  destinoSubida = { trabajadorId, tipo };
+  const inp = $('#ficheroTrab');
+  inp.accept = tipo === 'nomina' ? 'application/pdf' : '';
+  inp.click();
+}
+$('#ficheroTrab').addEventListener('change', async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  if(!files.length || !destinoSubida) return;
+  const { trabajadorId, tipo } = destinoSubida;
+  estado(true, 'Guardando documentos…', 30);
+  for(const f of files){
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    let texto = '', per = null;
+    if(/\.pdf$/i.test(f.name)){
+      try{
+        const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+        const t = [];
+        for(let i = 1; i <= doc.numPages; i++){
+          const tc = await (await doc.getPage(i)).getTextContent();
+          t.push(tc.items.map(it => it.str).join(' '));
+        }
+        texto = norm(t.join(' '));
+        per = detectaPeriodo(texto);
+      }catch(err){ console.warn('PDF ilegible', err); }
+    }
+    documentos.push({
+      id: 'd' + (++contador),
+      tipo, firma: f.name + '#suelto#' + f.size,
+      origen: f.name, paginas: [], texto,
+      trabajadorId,
+      periodo: tipo === 'nomina' ? per : null,
+      periodoTxt: tipo === 'nomina' ? etiquetaPeriodo(per) : '',
+      bytes,
+      nombre: tipo === 'nomina' ? null : f.name,
+      subido: Date.now() + contador
+    });
+  }
+  estado(true, 'Guardado', 100);
+  setTimeout(() => estado(false), 800);
+  $('#btnZip').disabled = false; $('#btnRe').disabled = false;
+  pintarPlantilla(); pintarArchivo();
+});
+
+/* ---------------- reconocimiento ---------------- */
+function identifica(texto){
+  const plano = texto.replace(/[^A-Z0-9ÑÇ ]/g,' ').replace(/\s+/g,' ');
+  const compacto = texto.replace(/[^A-Z0-9]/g,'');
+  let mejor = null, mejorPunt = 0;
+  for(const t of trabajadores){
+    let punt = 0;
+    const dni = (t.dni||'').replace(/[^A-Z0-9]/g,'');
+    if(dni.length >= 8 && compacto.includes(dni)) punt = 100;
+    if(punt < 100){
+      const tks = norm(t.nombre).split(' ').filter(x => x.length >= 3 && !PARTICULAS.has(x));
+      const hit = tks.filter(x => plano.includes(x)).length;
+      if(hit >= 2 || (tks.length === 1 && hit === 1)) punt = 10*hit + (hit === tks.length ? 15 : 0);
+    }
+    if(punt > mejorPunt){ mejorPunt = punt; mejor = t; }
+  }
+  return mejorPunt >= 20 ? mejor : null;
+}
+const anio4 = a => (a.length === 4 ? +a : 2000 + +a);
+function detectaPeriodo(texto){
+  if(!texto) return null;
+  let m = texto.match(/PERIODO[^0-9]{0,25}(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+  if(m) return { mes:+m[2], anio: anio4(m[3]) };
+  for(let i = 0; i < 12; i++){
+    const x = texto.match(new RegExp('\\b'+MESES[i]+'\\b(?:\\s+(?:DE|DEL)\\s*)?\\s*(\\d{4})?'));
+    if(x) return { mes:i+1, anio: x[1] ? +x[1] : (texto.match(/\b(20\d{2})\b/) ? +RegExp.$1 : null) };
+  }
+  if(texto.includes('SETIEMBRE')) return { mes:9, anio: texto.match(/\b(20\d{2})\b/) ? +RegExp.$1 : null };
+  m = texto.match(/\b(0[1-9]|1[0-2])[\/\-](20\d{2})\b/);
+  if(m) return { mes:+m[1], anio:+m[2] };
+  m = texto.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](20\d{2})\b/);
+  if(m) return { mes:+m[2], anio:+m[3] };
+  return null;
+}
+const etiquetaPeriodo = p => p ? MESES_BONITO[p.mes-1] + (p.anio ? ' ' + p.anio : '') : '';
+
+/* Reanalizar: sólo toca lo que sigue sin asignar */
+$('#btnRe').onclick = () => {
+  let asignados = 0, periodos = 0;
+  documentos.forEach(d => {
+    if(!d.texto) return;
+    if(!d.trabajadorId){
+      const t = identifica(d.texto);
+      if(t){ d.trabajadorId = t.id; d.nombre = null; asignados++; }
+    }
+    if(d.tipo === 'nomina' && !d.periodoTxt){
+      const p = detectaPeriodo(d.texto);
+      if(p){ d.periodo = p; d.periodoTxt = etiquetaPeriodo(p); d.nombre = null; periodos++; }
+    }
+  });
+  const msg = (asignados || periodos)
+    ? `${asignados} documento(s) asignados · ${periodos} periodo(s) detectados`
+    : 'Nada nuevo que asignar con la plantilla actual';
+  estado(true, msg, 100);
+  setTimeout(() => estado(false), 1800);
+  pintarPlantilla(); pintarArchivo();
+};
+
+/* ---------------- nombres ---------------- */
+function nombreFichero(d, usados){
+  const t = buscaTrab(d.trabajadorId);
+  const base = limpiaFich(t ? t.nombre : 'Sin_identificar');
+  if(d.tipo !== 'nomina'){
+    let nom = d.nombre || `${base}_${TIPOS[d.tipo].label}.pdf`, n = 2;
+    const punto = nom.lastIndexOf('.'), raiz = punto>0?nom.slice(0,punto):nom, ext = punto>0?nom.slice(punto):'';
+    while(usados.has(nom)) nom = `${raiz}_(${n++})${ext}`;
+    usados.add(nom); return nom;
+  }
+  let per;
+  if(d.periodo && $('#patron').value === 'num'){
+    per = ((d.periodo.anio || '') + '-' + String(d.periodo.mes).padStart(2,'0')).replace(/^-/,'');
+  }else{
+    per = limpiaFich(d.periodoTxt) || 'Sin_periodo';
+  }
+  let nom = `${base}_${per}.pdf`, n = 2;
+  while(usados.has(nom)) nom = `${base}_${per}_(${n++}).pdf`;
+  usados.add(nom); return nom;
+}
+
+/* ---------------- archivo ---------------- */
+function htmlDoc(d){
+  const opciones = trabajadores.map(t =>
+    `<option value="${t.id}" ${t.id===d.trabajadorId?'selected':''}>${esc(t.nombre)}</option>`).join('');
+  const tipos = Object.entries(TIPOS).map(([k,v]) =>
+    `<option value="${k}" ${k===d.tipo?'selected':''}>${v.carpeta}</option>`).join('');
+  const rango = d.paginas && d.paginas.length
+      ? (d.paginas.length===1 ? 'Pág. '+d.paginas[0]
+         : 'Págs. '+d.paginas[0]+'–'+d.paginas[d.paginas.length-1])
+      : 'Fichero suelto';
+  const sello = !d.trabajadorId ? '<span class="sello aviso">Asigna trabajador</span>'
+      : d.tipo!=='nomina' ? '<span class="sello ok">Archivado</span>'
+      : (d.periodoTxt ? '<span class="sello ok">Archivada</span>'
+                      : '<span class="sello aviso">Falta el periodo</span>');
+  return `<div class="doc" data-id="${d.id}">
+    <div class="fila">
+      <input class="nombre" value="${esc(d.nombre)}" aria-label="Nombre del fichero">
+      <span class="sello">${rango}</span>
+      <button class="btn mini" data-descargar="${d.id}">Descargar</button>
+      <button class="iconobtn borrar" data-eliminar="${d.id}" title="Eliminar del archivo">✕</button>
+    </div>
+    <div class="fila">
+      <select data-trab="${d.id}"><option value="">— Sin asignar —</option>${opciones}</select>
+      <select data-tipo="${d.id}">${tipos}</select>
+      ${d.tipo==='nomina'
+        ? `<input class="periodo" data-periodo="${d.id}" value="${esc(d.periodoTxt)}" placeholder="Enero 2025" aria-label="Periodo">`
+        : ''}
+      ${sello}
+    </div>
+  </div>`;
+}
+
+function bloqueSub(tipo, docs, trabajadorId, conBoton){
+  const v = TIPOS[tipo];
+  return `<div class="sub ${tipo}">
+    <div class="subcab">
+      <span class="pestana"></span>
+      <span class="subruta">${v.carpeta}/</span>
+      <span class="subn">${docs.length}</span>
+      ${conBoton ? `<span class="subacc"><button class="btn mini fantasma" data-subir="${tipo}" data-para="${trabajadorId}">Añadir</button></span>` : ''}
+    </div>
+    <div class="cuerpo">
+      ${docs.length ? docs.map(htmlDoc).join('')
+        : `<div class="vacio chico">Carpeta vacía.${conBoton ? ' Usa «Añadir» para guardar aquí un fichero.' : ''}</div>`}
+    </div>
+  </div>`;
+}
+
+function pintarArchivo(){
+  const cont = $('#archivo'), rot = $('#rotArchivo');
+  if(seleccion && !buscaTrab(seleccion)) seleccion = null;
+
+  const usados = new Set(documentos.filter(d => d.nombre).map(d => d.nombre));
+  documentos.forEach(d => { if(!d.nombre) d.nombre = nombreFichero(d, usados); });
+
+  /* --- ficha de un trabajador --- */
+  if(seleccion){
+    const t = buscaTrab(seleccion), suyos = docsDe(t.id);
+    rot.innerHTML = `<button class="volver" id="btnVolver">← Todo el archivo</button>
+      <h2>Ficha</h2>
+      <span class="cuenta">${suyos.length} ${suyos.length===1?'documento':'documentos'}</span>`;
+    cont.innerHTML = `
+      <div class="expediente">
+        <div class="iniciales">${esc(iniciales(t.nombre))}</div>
+        <div class="quien">
+          <h3>${esc(t.nombre)}</h3>
+          <div class="dato">${[t.dni, t.puesto].filter(Boolean).map(esc).join(' · ') || 'Sin más datos'}</div>
+          <div class="dato">/${esc(limpiaCarp(t.nombre))}/</div>
+        </div>
+        <div class="mandos">
+          <button class="btn mini" data-editar-ficha="${t.id}">Editar datos</button>
+          <button class="btn mini fantasma" data-zip-carpeta="${t.id}" ${suyos.length?'':'disabled'}>Descargar carpeta</button>
+        </div>
+      </div>
+      <div class="carpeta">
+        <div class="cab">
+          <span class="icono"></span>
+          <span class="ruta">/${esc(limpiaCarp(t.nombre))}/</span>
+          <span class="n">${suyos.length} ${suyos.length===1?'fichero':'ficheros'}</span>
+        </div>
+        ${Object.keys(TIPOS).map(k => bloqueSub(k, docsDeTipo(t.id, k), t.id, true)).join('')}
+      </div>`;
+    return;
+  }
+
+  /* --- vista general --- */
+  rot.innerHTML = `<h2>Archivo</h2>
+    <span class="cuenta">${documentos.length} ${documentos.length===1?'documento':'documentos'}</span>`;
+  if(!documentos.length){
+    cont.innerHTML = `<div class="vacio"><strong>Aquí aparecerán las nóminas separadas</strong>
+      Sube el PDF del mes y verás una carpeta por trabajador.</div>`;
+    return;
+  }
+
+  const conDocs = new Set(documentos.map(d => d.trabajadorId || '__sin__'));
+  const claves = [...conDocs].sort((a,b) => a==='__sin__' ? 1 : b==='__sin__' ? -1
+      : buscaTrab(a).nombre.localeCompare(buscaTrab(b).nombre,'es'));
+
+  cont.innerHTML = claves.map(k => {
+    const sin = k === '__sin__';
+    const nom = sin ? 'Sin identificar' : limpiaCarp(buscaTrab(k).nombre);
+    const docs = sin ? ordena(documentos.filter(d => !d.trabajadorId)) : docsDe(k);
+    return `<div class="carpeta ${sin?'sin':''}">
+      <div class="cab">
+        <span class="icono"></span>
+        <span class="ruta">/${esc(nom)}/</span>
+        ${sin ? '' : `<button class="abrir" data-abrir-ficha="${k}">Ver ficha →</button>`}
+        <span class="n">${docs.length} ${docs.length===1?'fichero':'ficheros'}</span>
+      </div>
+      ${ sin ? `<div class="cuerpo" style="padding:0 14px 6px">${docs.map(htmlDoc).join('')}</div>`
+             : Object.keys(TIPOS).filter(tp => docsDeTipo(k,tp).length)
+                 .map(tp => bloqueSub(tp, docsDeTipo(k,tp), k, false)).join('') }
+    </div>`;
+  }).join('');
+}
+
+/* interacción */
+$('#archivo').addEventListener('change', e => {
+  const idT = e.target.dataset.trab, idP = e.target.dataset.periodo, idTipo = e.target.dataset.tipo;
+  if(idT){
+    const d = documentos.find(x => x.id === idT);
+    d.trabajadorId = e.target.value || null; d.nombre = null;
+    pintarPlantilla(); pintarArchivo();
+  }else if(idTipo){
+    const d = documentos.find(x => x.id === idTipo);
+    d.tipo = e.target.value;
+    if(d.tipo !== 'nomina'){ d.periodo = null; d.periodoTxt = ''; }
+    d.nombre = null; pintarPlantilla(); pintarArchivo();
+  }else if(idP){
+    const d = documentos.find(x => x.id === idP);
+    d.periodoTxt = e.target.value.trim();
+    d.periodo = detectaPeriodo(norm(d.periodoTxt));
+    d.nombre = null; pintarArchivo();
+  }else if(e.target.classList.contains('nombre')){
+    const d = documentos.find(x => x.id === e.target.closest('.doc').dataset.id);
+    let v = e.target.value.trim();
+    if(v && !/\.[a-z0-9]{2,4}$/i.test(v)) v += '.pdf';
+    d.nombre = v || null; pintarArchivo();
+  }
+});
+
+$('#archivo').addEventListener('click', e => {
+  const dl = e.target.dataset.descargar;
+  if(dl){
+    const d = documentos.find(x => x.id === dl);
+    return bajar(new Blob([d.bytes]), d.nombre);
+  }
+  const el = e.target.dataset.eliminar;
+  if(el){
+    const d = documentos.find(x => x.id === el);
+    if(!confirm(`¿Eliminar ${d.nombre} del archivo?`)) return;
+    documentos = documentos.filter(x => x.id !== el);
+    $('#btnZip').disabled = !documentos.length;
+    return (pintarPlantilla(), pintarArchivo());
+  }
+  const ver = e.target.dataset.abrirFicha;   if(ver) return abrirTrabajador(ver);
+  const ed  = e.target.dataset.editarFicha;  if(ed)  return abrirModal(ed);
+  const zc  = e.target.dataset.zipCarpeta;
+  if(zc) return zipDe(docsDe(zc), limpiaFich(buscaTrab(zc).nombre), [zc]);
+  const su  = e.target.dataset.subir;
+  if(su) return pedirFichero(e.target.dataset.para, su);
+});
+$('#rotArchivo').addEventListener('click', e => {
+  if(e.target.id === 'btnVolver'){ seleccion = null; pintarPlantilla(); pintarArchivo(); }
+});
+
+function bajar(blob, nombre){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nombre; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+/* ---------------- ZIP ---------------- */
+async function zipDe(docs, sufijo, soloTrab){
+  if(!docs.length) return;
+  estado(true, 'Montando el archivo…', 40);
+  const zip = new JSZip();
+  const quienes = soloTrab || trabajadores.map(t => t.id);
+  quienes.forEach(id => {
+    const t = buscaTrab(id); if(!t) return;
+    const c = zip.folder(limpiaCarp(t.nombre));
+    Object.values(TIPOS).forEach(v => c.folder(v.carpeta));   // estructura siempre completa
+  });
+  docs.forEach(d => {
+    const t = buscaTrab(d.trabajadorId);
+    const raiz = t ? zip.folder(limpiaCarp(t.nombre)).folder(TIPOS[d.tipo].carpeta)
+                   : zip.folder('Sin identificar');
+    raiz.file(d.nombre, d.bytes);
+  });
+  const blob = await zip.generateAsync({type:'blob'}, m => estado(true,'Comprimiendo…',40+m.percent*0.6));
+  bajar(blob, `Nominas_${sufijo}_${new Date().toISOString().slice(0,10)}.zip`);
+  estado(true, 'Descargado', 100);
+  setTimeout(() => estado(false), 900);
+}
+$('#btnZip').onclick = () => zipDe(documentos, 'completo', null);
+
+/* ---------------- arranque ---------------- */
+pintarArchivo();
+cargarPlantilla();
+</script>

@@ -1,0 +1,44 @@
+# Infraestructura del backend en Render.
+# Al conectar el repositorio, Render lee este fichero y crea el servicio solo.
+# Las claves marcadas como sync:false se rellenan a mano en el panel: nunca en el repo.
+
+services:
+  - type: web
+    name: archivo-nominas-api
+    runtime: python
+    plan: free                 # subelo a starter si no quieres que el servicio se duerma
+    region: frankfurt          # region de la UE, por proteccion de datos
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    healthCheckPath: /api/salud
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+
+      # Cadena "Pooled connection" de Neon.
+      - key: DATABASE_URL
+        sync: false
+
+      # python -c "import secrets; print(secrets.token_urlsafe(48))"
+      - key: JWT_SECRETO
+        generateValue: true
+      - key: JWT_HORAS
+        value: 12
+
+      # Front y back estan en dominios distintos: la cookie necesita estos valores.
+      - key: COOKIE_SEGURA
+        value: true
+      - key: COOKIE_SAMESITE
+        value: none
+
+      # Clave de un solo uso para crear el primer administrador. VACIALA despues.
+      - key: CLAVE_ARRANQUE
+        sync: false
+
+      # URL del frontend en Vercel, sin barra final.
+      - key: ORIGENES_PERMITIDOS
+        sync: false
+
+      - key: MAX_MB_SUBIDA
+        value: 25
