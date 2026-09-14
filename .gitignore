@@ -1,27 +1,84 @@
+# ---------------------------------------------------------------
 # Entornos y dependencias
+# ---------------------------------------------------------------
+.venv/
+venv/
+env/
 backend/.venv/
+node_modules/
 frontend/node_modules/
 frontend/dist/
+dist/
+build/
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
-# Secretos y datos: NUNCA al repositorio
+# ---------------------------------------------------------------
+# Secretos: NUNCA al repositorio
+# ---------------------------------------------------------------
 .env
-.env.local
-backend/.env
-frontend/.env
-frontend/.env.local
+.env.*
+!.env.example
+!frontend/.env.development
+*.pem
+*.key
+*.p12
+credenciales*.json
+secretos*.json
+
+# ---------------------------------------------------------------
+# Bases de datos y ficheros de datos
+# ---------------------------------------------------------------
 *.db
+*.db-journal
+*.sqlite
+*.sqlite3
 backend/local.db
 backend/pruebas/prueba.db
 
-# El archivo real de nominas, si alguien procesa en local
+# Nominas y documentos reales de trabajadores
 Archivo/
+archivo/
+salida/
+subidas/
+uploads/
+*.pdf
+*.xls
+*.xlsx
+*.csv
 *.zip
+*.rar
+*.7z
+# Excepcion: el PDF de ejemplo si forma parte del repositorio
+!ejemplo/nominas_ejemplo_enero.pdf
 
-# Vercel
-.vercel
+# ---------------------------------------------------------------
+# Logs y temporales
+# ---------------------------------------------------------------
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.bak
+*~
 
-# Sistema
+# ---------------------------------------------------------------
+# Editores e IDE
+# ---------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+
+# ---------------------------------------------------------------
+# Sistema y herramientas
+# ---------------------------------------------------------------
 .DS_Store
 Thumbs.db
+desktop.ini
+.vercel
+.gstack/

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Documentos: procesado del PDF de lote, consulta, reasignacion, descarga y ZIP."""
 
-import io
 import zipfile
 from urllib.parse import quote
 
@@ -12,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from ..config import ajustes
+from ..db import SesionLocal
 from ..deps import Actual, Admin, SesionBD, anotar
 from ..models import Documento, Trabajador
 from ..nominas import (
@@ -317,54 +317,121 @@ def borrar(documento_id: int, bd: SesionBD, admin: Admin) -> None:
 # --------------------------------------------------------------------------
 
 
+class _BufferZip:
+    """Destino de escritura de zipfile que el generador va vaciando por trozos.
+
+    No tiene seek(): zipfile lo detecta y escribe los tamanos en descriptores de datos
+    y en el directorio central del final, que es lo que leen los descompresores.
+    """
+
+    def __init__(self) -> None:
+        self._trozos: list[bytes] = []
+        self._escrito = 0
+
+    def write(self, datos: bytes) -> int:
+        self._trozos.append(datos)
+        self._escrito += len(datos)
+        return len(datos)
+
+    def tell(self) -> int:
+        return self._escrito
+
+    def flush(self) -> None:
+        pass
+
+    def vaciar(self) -> bytes:
+        datos = b"".join(self._trozos)
+        self._trozos.clear()
+        return datos
+
+
+def _destino_unico(ruta: str, nombre_fichero: str, usados: set[str]) -> str:
+    """Dos documentos distintos no pueden compartir nombre dentro del ZIP."""
+    destino = f"{ruta}/{nombre_fichero}"
+    if destino in usados:
+        raiz, _, ext = nombre_fichero.rpartition(".")
+        n = 2
+        while destino in usados:
+            destino = (f"{ruta}/{raiz}_({n}).{ext}" if raiz
+                       else f"{ruta}/{nombre_fichero}_({n})")
+            n += 1
+    usados.add(destino)
+    return destino
+
+
+def _documentos_de(bd, trabajador_id: int | None, anio: int | None, mes: int | None):
+    """Los documentos de un trabajador (o los sin asignar), de uno en uno.
+
+    Solo pide las tres columnas que necesita el ZIP y usa yield_per para que el driver
+    no traiga todos los PDF de golpe: en memoria hay un documento cada vez.
+    """
+    consulta = select(Documento.tipo, Documento.nombre_fichero, Documento.contenido).where(
+        Documento.trabajador_id.is_(None) if trabajador_id is None
+        else Documento.trabajador_id == trabajador_id
+    )
+    if anio:
+        consulta = consulta.where(Documento.periodo_anio == anio)
+    if mes:
+        consulta = consulta.where(Documento.periodo_mes == mes)
+    return bd.execute(consulta.order_by(Documento.id).execution_options(yield_per=1))
+
+
+def _generar_zip(trabajador_id: int | None, anio: int | None, mes: int | None):
+    """Va soltando el ZIP a trozos, un trabajador cada vez.
+
+    Abre su propia sesion: el generador se ejecuta mientras se envia la respuesta, y para
+    entonces FastAPI ya ha cerrado la sesion de la peticion.
+    """
+    buffer = _BufferZip()
+    bd = SesionLocal()
+    try:
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:
+            consulta = select(Trabajador).order_by(Trabajador.nombre)
+            if trabajador_id is not None:
+                consulta = consulta.where(Trabajador.id == trabajador_id)
+            # Se recorren tambien las bajas: sus nominas siguen en el archivo y hay que
+            # conservarlas cuatro anos, aunque ya no salgan en la plantilla.
+            trabajadores = list(bd.scalars(consulta))
+
+            usados: set[str] = set()
+            for t in trabajadores:
+                carpeta = para_carpeta(t.nombre)
+                # La estructura completa se crea siempre, aunque una subcarpeta quede vacia.
+                if t.activo or trabajador_id is not None:
+                    for sub in CARPETA_TIPO.values():
+                        z.writestr(f"{carpeta}/{sub}/", "")
+                    yield buffer.vaciar()
+                for tipo, nombre_fichero, contenido in _documentos_de(bd, t.id, anio, mes):
+                    ruta = f"{carpeta}/{CARPETA_TIPO[tipo]}"
+                    z.writestr(_destino_unico(ruta, nombre_fichero, usados), contenido)
+                    yield buffer.vaciar()
+
+            # Las hojas sin asignar solo tienen sentido en el archivo completo.
+            if trabajador_id is None:
+                for _tipo, nombre_fichero, contenido in _documentos_de(bd, None, anio, mes):
+                    z.writestr(_destino_unico(SIN_IDENTIFICAR, nombre_fichero, usados), contenido)
+                    yield buffer.vaciar()
+
+        # El cierre del with escribe el directorio central: hay que soltarlo tambien.
+        yield buffer.vaciar()
+    finally:
+        bd.close()
+
+
 @router.get("/zip/descargar")
 def zip_descargar(
-    bd: SesionBD,
     _: Actual,
     trabajador_id: int | None = None,
     anio: int | None = None,
     mes: int | None = None,
 ) -> StreamingResponse:
-    consulta = select(Documento).options(selectinload(Documento.trabajador))
-    if trabajador_id is not None:
-        consulta = consulta.where(Documento.trabajador_id == trabajador_id)
-    if anio:
-        consulta = consulta.where(Documento.periodo_anio == anio)
-    if mes:
-        consulta = consulta.where(Documento.periodo_mes == mes)
-    documentos = list(bd.scalars(consulta))
+    """ZIP del archivo, montado trabajador a trabajador y enviado segun se genera.
 
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:
-        # La estructura completa se crea siempre, aunque una subcarpeta quede vacia.
-        trabajadores = bd.scalars(
-            select(Trabajador).where(Trabajador.id == trabajador_id) if trabajador_id
-            else select(Trabajador).where(Trabajador.activo.is_(True))
-        ).all()
-        for t in trabajadores:
-            for carpeta in CARPETA_TIPO.values():
-                z.writestr(f"{para_carpeta(t.nombre)}/{carpeta}/", "")
-
-        usados: set[str] = set()
-        for doc in documentos:
-            if doc.trabajador:
-                ruta = f"{para_carpeta(doc.trabajador.nombre)}/{CARPETA_TIPO[doc.tipo]}"
-            else:
-                ruta = SIN_IDENTIFICAR
-            destino = f"{ruta}/{doc.nombre_fichero}"
-            # Dos documentos distintos no pueden compartir nombre dentro del ZIP.
-            if destino in usados:
-                raiz, _, ext = doc.nombre_fichero.rpartition(".")
-                n = 2
-                while destino in usados:
-                    destino = f"{ruta}/{raiz}_({n}).{ext}" if raiz else f"{ruta}/{doc.nombre_fichero}_({n})"
-                    n += 1
-            usados.add(destino)
-            z.writestr(destino, doc.contenido)
-
-    buffer.seek(0)
-    nombre = "archivo_nominas.zip"
+    La memoria no crece con el tamano del archivo, pero a cambio la respuesta empieza con
+    un 200: si algo falla a mitad, el navegador recibe un ZIP truncado en vez de un error.
+    """
     return StreamingResponse(
-        buffer, media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
+        _generar_zip(trabajador_id, anio, mes),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="archivo_nominas.zip"'},
     )
