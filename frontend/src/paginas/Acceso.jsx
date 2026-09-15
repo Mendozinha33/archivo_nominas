@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { Aviso } from '../componentes/Piezas'
+import { APPS_MENDOZA } from '../lib/enlaces'
 import { useSesion } from '../lib/sesion'
 
 /** Pantalla de entrada. Si no hay ningún usuario todavía, pide crear el primer administrador. */
@@ -31,7 +32,11 @@ export default function Acceso() {
     <div className="lienzo">
       <div className="acceso">
         <form className="modal-cuerpo" onSubmit={enviar}>
-          <p className="eyebrow">Gestión de nóminas y contratos</p>
+          <div className="cab-fila">
+            <p className="eyebrow">Gestión de nóminas y contratos</p>
+            <a className="btn mini fantasma" href={APPS_MENDOZA}
+              title="Volver al centro de aplicaciones">Apps Mendoza</a>
+          </div>
           <h1>Archivo de <em>nóminas</em></h1>
           <p className="ayuda">
             {instalado

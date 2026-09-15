@@ -1,6 +1,7 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
 import { Estado } from './componentes/Piezas'
+import { APPS_MENDOZA } from './lib/enlaces'
 import { useSesion } from './lib/sesion'
 import Acceso from './paginas/Acceso'
 import Archivo from './paginas/Archivo'
@@ -33,7 +34,11 @@ export default function App() {
           </div>
           <div className="quien-soy">
             <span><b>{usuario.nombre}</b><br />{usuario.rol}</span>
-            <button className="btn mini fantasma" onClick={salir}>Salir</button>
+            <div className="acciones-cab">
+              <a className="btn mini fantasma" href={APPS_MENDOZA}
+                title="Volver al centro de aplicaciones">Apps Mendoza</a>
+              <button className="btn mini fantasma" onClick={salir}>Salir</button>
+            </div>
           </div>
         </div>
         <p className="lead">

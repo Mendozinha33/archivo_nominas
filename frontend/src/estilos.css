@@ -24,6 +24,8 @@ h1 em{font-style:normal;color:var(--oro)}
 .quien-soy{font-family:var(--mono);font-size:11px;color:var(--tinta2);text-align:right;
            display:flex;flex-direction:column;gap:6px;align-items:flex-end}
 .quien-soy b{color:var(--tinta);font-weight:600}
+.acciones-cab{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+a.btn{text-decoration:none;display:inline-flex;align-items:center}
 
 button{font:inherit;cursor:pointer}
 .btn{border:1.5px solid var(--tinta);background:var(--tarjeta);color:var(--tinta);
